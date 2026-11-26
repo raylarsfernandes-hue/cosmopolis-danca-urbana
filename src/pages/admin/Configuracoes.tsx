@@ -17,7 +17,6 @@ export default function Configuracoes() {
     supabase.from('event_settings').select('*').limit(1).maybeSingle().then(({ data }) => {
       const s = data as EventSettings
       if (s) {
-        s.battle_signup_deadline = s.battle_signup_deadline?.slice(0, 5) ?? null
         s.jam_start_time = s.jam_start_time?.slice(0, 5) ?? null
       }
       setForm(s)
@@ -82,7 +81,7 @@ export default function Configuracoes() {
         </div>
         <label className="checkbox-field">
           <input type="checkbox" checked={form.workshop_selection_enabled} onChange={(e) => set('workshop_selection_enabled', e.target.checked)} />
-          <span><strong>Pedir escolha de workshops na inscrição.</strong> Desligado: a inscrição vale para o dia inteiro, sem escolha.</span>
+          <span><strong>Mostrar os workshops no formulário de inscrição.</strong> Desligado, a pessoa só se inscreve no dia e nas batalhas, sem escolher workshop.</span>
         </label>
 
         <h3 className="form-section-title">Evento</h3>
@@ -118,13 +117,6 @@ export default function Configuracoes() {
           <label>Busca do Google Maps</label>
           <input type="text" value={form.map_query ?? ''} onChange={(e) => set('map_query', toNull(e.target.value))} />
           <p className="field-hint">Texto usado no mapa e no botão "Abrir no Google Maps". Se o pin cair no lugar errado, ajuste aqui.</p>
-        </div>
-
-        <h3 className="form-section-title">Batalhas</h3>
-        <div className="field">
-          <label>Horário-limite da inscrição no local</label>
-          <input type="time" value={form.battle_signup_deadline ?? ''} onChange={(e) => set('battle_signup_deadline', toNull(e.target.value))} />
-          <p className="field-hint">Preenchido, aparece junto de "Inscrição no local" em todas as batalhas.</p>
         </div>
 
         <h3 className="form-section-title">Jam</h3>

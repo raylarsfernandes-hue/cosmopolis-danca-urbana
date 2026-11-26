@@ -1,15 +1,13 @@
+import { Link } from 'react-router-dom'
 import type { BattlePublic, EventSettings } from '../types'
-import { formatDayMonthShort, formatHour, formatMoney } from '../utils/format'
+import { formatHour, formatMoney } from '../utils/format'
 import { resolveImageUrl } from '../utils/image'
+import { registrationTarget } from '../utils/registration'
 
-// Texto padrão das batalhas: inscrição só no local, no dia do evento.
-// O horário-limite aparece sozinho quando for preenchido no admin.
-export function battleSignupText(settings: EventSettings | null): string {
-  if (!settings) return 'Inscrição no local'
-  const base = `Inscrição no local, no dia ${formatDayMonthShort(settings.event_date)}`
-  return settings.battle_signup_deadline
-    ? `${base}, até as ${formatHour(settings.battle_signup_deadline)}`
-    : base
+// "Step Pérez, Marcão e Wellington Rodrigues" -> "Jurados"; um nome só -> "Júri"
+export function judgesLabel(names: string | null | undefined): string {
+  if (!names) return 'Júri'
+  return /,|\s+e\s+/.test(names) ? 'Jurados' : 'Júri'
 }
 
 export default function BattleCard({ battle, settings }: { battle: BattlePublic; settings: EventSettings | null }) {
@@ -18,6 +16,8 @@ export default function BattleCard({ battle, settings }: { battle: BattlePublic;
   const m = battle.name.match(/^(batalha(?:\s+de)?)\s+(.+)$/i)
   const kicker = m ? m[1] : 'Batalha'
   const title = m ? m[2] : battle.name
+  const reg = registrationTarget(settings)
+
   return (
     <article className="battle-card">
       <header className="battle-head">
@@ -40,13 +40,19 @@ export default function BattleCard({ battle, settings }: { battle: BattlePublic;
         <div className="battle-judge">
           {photo && <img src={photo} alt="" loading="lazy" />}
           <div>
-            <span className="battle-judge-label">Júri</span>
+            <span className="battle-judge-label">{judgesLabel(battle.judge_name)}</span>
             <strong>{battle.judge_name}</strong>
           </div>
         </div>
       )}
 
-      <p className="battle-signup">{battleSignupText(settings)}</p>
+      {settings && (reg.open ? (
+        reg.external
+          ? <a className="battle-signup battle-signup-btn" href={reg.href} target="_blank" rel="noreferrer">Quero competir</a>
+          : <Link className="battle-signup battle-signup-btn" to={`/inscricao?batalha=${battle.id}`}>Quero competir</Link>
+      ) : (
+        <p className="battle-signup">Inscrições em breve</p>
+      ))}
     </article>
   )
 }

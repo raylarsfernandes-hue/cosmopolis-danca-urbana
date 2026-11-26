@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import { useEventSettings } from '../../hooks/useEventSettings'
-import type { GuardianStatus, RegistrationRow, Workshop } from '../../types'
+import type { Battle, GuardianStatus, RegistrationRow, Workshop } from '../../types'
 import { downloadCSV } from '../../utils/csv'
 import { computeAge, guardianStatusLabel } from '../../utils/format'
 
@@ -15,7 +15,10 @@ export default function Inscritos() {
   const { settings } = useEventSettings()
   const [rows, setRows] = useState<RegistrationRow[]>([])
   const [picks, setPicks] = useState<Record<string, string[]>>({})
+  const [battlePicks, setBattlePicks] = useState<Record<string, string[]>>({})
   const [workshops, setWorkshops] = useState<Workshop[]>([])
+  const [battles, setBattles] = useState<Battle[]>([])
+  const [filterActivity, setFilterActivity] = useState('')
   const [loading, setLoading] = useState(true)
 
   const [search, setSearch] = useState('')
@@ -24,11 +27,19 @@ export default function Inscritos() {
   const [filterCheckin, setFilterCheckin] = useState('')
 
   async function load() {
-    const [{ data: r }, { data: rw }, { data: w }] = await Promise.all([
+    const [{ data: r }, { data: rw }, { data: w }, { data: rb }, { data: b }] = await Promise.all([
       supabase.from('registrations').select('*').order('created_at', { ascending: true }),
       supabase.from('registration_workshops').select('registration_id, workshop_id'),
       supabase.from('workshops').select('*').order('order_index'),
+      supabase.from('registration_battles').select('registration_id, battle_id'),
+      supabase.from('battles').select('*').order('order_index'),
     ])
+    const bmap: Record<string, string[]> = {}
+    ;((rb ?? []) as { registration_id: string; battle_id: string }[]).forEach((x) => {
+      ;(bmap[x.registration_id] ||= []).push(x.battle_id)
+    })
+    setBattlePicks(bmap)
+    setBattles((b ?? []) as Battle[])
     setRows((r ?? []) as RegistrationRow[])
     const map: Record<string, string[]> = {}
     ;((rw ?? []) as { registration_id: string; workshop_id: string }[]).forEach((x) => {
@@ -51,7 +62,7 @@ export default function Inscritos() {
     const w = workshops.find((x) => x.id === id)
     return w ? (w.modality ? `${w.modality} (${w.teacher_name})` : w.teacher_name) : '?'
   }
-  const hasPicks = Object.keys(picks).length > 0
+  const battleLabel = (id: string) => battles.find((x) => x.id === id)?.name ?? '?'
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -61,15 +72,17 @@ export default function Inscritos() {
       if (filterMinors && !isMinor(r)) return false
       if (filterCheckin === 'sim' && !r.checked_in) return false
       if (filterCheckin === 'nao' && (r.checked_in || r.status !== 'confirmed')) return false
+      if (filterActivity.startsWith('w:') && !(picks[r.id] ?? []).includes(filterActivity.slice(2))) return false
+      if (filterActivity.startsWith('b:') && !(battlePicks[r.id] ?? []).includes(filterActivity.slice(2))) return false
       if (term) {
-        const text = `${r.full_name} ${r.email} ${r.code}`.toLowerCase()
+        const text = `${r.full_name} ${r.artistic_name ?? ''} ${r.email} ${r.code}`.toLowerCase()
         const nums = `${r.cpf} ${r.phone.replace(/\D/g, '')}`
         if (!text.includes(term) && !(digits.length >= 3 && nums.includes(digits))) return false
       }
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, search, filterStatus, filterMinors, filterCheckin, eventDate])
+  }, [rows, search, filterStatus, filterMinors, filterCheckin, filterActivity, picks, battlePicks, eventDate])
 
   async function rpc(name: string, args: Record<string, unknown>, errorMsg?: string) {
     const { error } = await supabase.rpc(name, args)
@@ -101,6 +114,7 @@ export default function Inscritos() {
       return {
         Codigo: r.code,
         Nome: r.full_name,
+        NomeArtistico: r.artistic_name ?? '',
         CPF: r.cpf,
         Telefone: r.phone,
         Email: r.email,
@@ -112,7 +126,8 @@ export default function Inscritos() {
         Status: STATUS_LABEL[r.status],
         PosicaoEspera: r.waitlist_position ?? '',
         CheckIn: r.checked_in ? 'Compareceu' : '',
-        ...(hasPicks ? { Workshops: (picks[r.id] ?? []).map(workshopLabel).join(' / ') } : {}),
+        Workshops: (picks[r.id] ?? []).map(workshopLabel).join(' / '),
+        Batalhas: (battlePicks[r.id] ?? []).map(battleLabel).join(' / '),
         AutorizacaoImagem: r.image_consent ? 'Sim' : 'Não',
         AceitaComunicacao: r.consent_marketing ? 'Sim' : 'Não',
         InscritoEm: new Date(r.created_at).toLocaleString('pt-BR'),
@@ -145,6 +160,15 @@ export default function Inscritos() {
           <option value="sim">Já fizeram check-in</option>
           <option value="nao">Ainda não chegaram</option>
         </select>
+        <select value={filterActivity} onChange={(e) => setFilterActivity(e.target.value)} aria-label="Workshop ou batalha">
+          <option value="">Todas as atividades</option>
+          <optgroup label="Workshops">
+            {workshops.map((w) => <option key={w.id} value={`w:${w.id}`}>{workshopLabel(w.id)}</option>)}
+          </optgroup>
+          <optgroup label="Batalhas">
+            {battles.map((b) => <option key={b.id} value={`b:${b.id}`}>{b.name}</option>)}
+          </optgroup>
+        </select>
         <label className="checkbox-field" style={{ margin: 0, fontSize: 14 }}>
           <input type="checkbox" checked={filterMinors} onChange={(e) => setFilterMinors(e.target.checked)} />
           <span>Só menores</span>
@@ -166,7 +190,7 @@ export default function Inscritos() {
               <th>Idade</th>
               <th>Autorização resp.</th>
               <th>CPF / Telefone</th>
-              {hasPicks && <th>Workshops</th>}
+              <th>Workshops / batalhas</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -187,6 +211,7 @@ export default function Inscritos() {
                   </td>
                   <td>
                     <strong>{r.full_name}</strong>
+                    {r.artistic_name && <div className="small-label">Nome artístico: {r.artistic_name}</div>}
                     <div className="small-label">{r.code} · {r.email}</div>
                   </td>
                   <td>
@@ -215,7 +240,11 @@ export default function Inscritos() {
                     {r.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}
                     <div className="small-label">{r.phone}</div>
                   </td>
-                  {hasPicks && <td>{(picks[r.id] ?? []).map(workshopLabel).join(', ') || '—'}</td>}
+                  <td style={{ minWidth: 180 }}>
+                    {(picks[r.id] ?? []).map((id) => <div key={id}>{workshopLabel(id)}</div>)}
+                    {(battlePicks[r.id] ?? []).map((id) => <div key={id} style={{ color: 'var(--yellow)' }}>{battleLabel(id)}</div>)}
+                    {!(picks[r.id]?.length || battlePicks[r.id]?.length) && <span className="muted">—</span>}
+                  </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {r.status === 'confirmed' && <button className="btn-sm danger" onClick={() => handleCancel(r)}>Cancelar</button>}

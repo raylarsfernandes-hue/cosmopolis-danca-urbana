@@ -374,6 +374,14 @@ h1, h2, h3, h4 {
   background: var(--navy); color: var(--yellow);
   font-weight: 700; font-size: 15px;
 }
+.battle-signup-btn {
+  display: block; text-decoration: none; text-align: center;
+  background: var(--yellow); color: var(--navy);
+  font-family: var(--display); font-style: italic; font-weight: 800;
+  text-transform: uppercase; font-size: 22px; padding: 14px 18px;
+  border-top: 3px solid var(--navy);
+}
+.battle-signup-btn:active { background: var(--white); }
 
 /* Inscrições */
 .cta-block { text-align: left; }
@@ -434,6 +442,12 @@ h1, h2, h3, h4 {
 .consent-group-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 22px 0 10px; color: var(--muted-ink); }
 .workshop-pick { border: 2px solid var(--line-ink); border-radius: var(--radius); padding: 14px; margin: 0 0 16px; }
 .workshop-pick legend { font-weight: 700; font-size: 14px; padding: 0 6px; }
+.pick-hint { margin: 0 0 12px; font-size: 14px; color: var(--muted-ink); }
+.pick-sub { display: block; font-size: 13px; color: var(--muted-ink); }
+.pick-full { opacity: 0.55; cursor: not-allowed; }
+.confirm-list { margin: 14px 0 0; padding: 0; list-style: none; }
+.confirm-list li { padding: 6px 0; border-bottom: 1px solid var(--line-ink); font-weight: 600; }
+.confirm-list-label { margin-top: 16px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-ink); }
 .workshop-pick.error { border-color: var(--error-ink); }
 .minor-notice {
   background: #FFF4C2; color: var(--navy);

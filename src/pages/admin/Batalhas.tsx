@@ -7,7 +7,7 @@ import { formatHour, formatMoney } from '../../utils/format'
 type Form = Omit<Battle, 'id'>
 const blank: Form = {
   name: '', audience: null, judge_name: null, judge_photo_url: null,
-  prize_first: null, prize_second: null, start_time: null, order_index: 0, active: true,
+  prize_first: null, prize_second: null, start_time: null, max_vagas: null, order_index: 0, active: true,
 }
 const toNull = (v: string) => (v.trim() === '' ? null : v.trim())
 const toMoney = (v: string) => {
@@ -31,7 +31,7 @@ export default function AdminBatalhas() {
   function startEdit(b: Battle) {
     setForm({
       name: b.name, audience: b.audience, judge_name: b.judge_name, judge_photo_url: b.judge_photo_url,
-      prize_first: b.prize_first, prize_second: b.prize_second, start_time: b.start_time?.slice(0, 5) ?? null,
+      prize_first: b.prize_first, prize_second: b.prize_second, start_time: b.start_time?.slice(0, 5) ?? null, max_vagas: b.max_vagas,
       order_index: b.order_index, active: b.active,
     })
     setEditingId(b.id)
@@ -64,9 +64,9 @@ export default function AdminBatalhas() {
     <div>
       <h2>Batalhas</h2>
       <p className="admin-help">
-        As batalhas não têm inscrição pelo site. Em todos os lugares onde aparecem, o site mostra
-        "Inscrição no local" com a data do evento e, se preenchido em Configurações, o horário-limite.
-        A premiação total exibida ({formatMoney(total) || 'R$ 0'}) é a soma dos prêmios das batalhas visíveis.
+        Quem quer competir se inscreve pelo formulário do site, marcando a batalha e informando o nome
+        artístico. Cada card de batalha no site tem o botão "Quero competir". A lista de competidores
+        fica em Inscritos (filtre pela batalha). A premiação total exibida ({formatMoney(total) || 'R$ 0'}) é a soma dos prêmios das batalhas visíveis.
       </p>
 
       {editingId === null && (
@@ -85,8 +85,8 @@ export default function AdminBatalhas() {
             <input type="text" value={form.audience ?? ''} onChange={(e) => setForm({ ...form, audience: toNull(e.target.value) })} />
           </div>
           <div className="field">
-            <label>Júri</label>
-            <input type="text" value={form.judge_name ?? ''} onChange={(e) => setForm({ ...form, judge_name: toNull(e.target.value) })} />
+            <label>Jurados</label>
+            <input type="text" value={form.judge_name ?? ''} onChange={(e) => setForm({ ...form, judge_name: toNull(e.target.value) })} placeholder="Ex.: Fulano, Ciclano e Beltrano" />
           </div>
           <ImageField label="Foto do júri (opcional)" folder="juri" value={form.judge_photo_url} onChange={(url) => setForm({ ...form, judge_photo_url: url })} />
           <div className="form-row">
@@ -104,6 +104,12 @@ export default function AdminBatalhas() {
               <label>Horário da batalha</label>
               <input type="time" value={form.start_time ?? ''} onChange={(e) => setForm({ ...form, start_time: toNull(e.target.value) })} />
             </div>
+            <div className="field">
+              <label>Limite de competidores</label>
+              <input type="text" inputMode="numeric" value={form.max_vagas ?? ''} onChange={(e) => setForm({ ...form, max_vagas: e.target.value.replace(/\D/g, '') === '' ? null : Number(e.target.value.replace(/\D/g, '')) })} placeholder="Sem limite" />
+            </div>
+          </div>
+          <div className="form-row">
             <div className="field">
               <label>Ordem</label>
               <input type="text" inputMode="numeric" value={form.order_index} onChange={(e) => setForm({ ...form, order_index: Number(e.target.value.replace(/\D/g, '')) || 0 })} />
@@ -123,7 +129,7 @@ export default function AdminBatalhas() {
       {loading ? <p>Carregando...</p> : (
         <div className="table-wrap">
           <table className="data-table">
-            <thead><tr><th>Batalha</th><th>Júri</th><th>1º</th><th>2º</th><th>Horário</th><th>No site</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Batalha</th><th>Jurados</th><th>1º</th><th>2º</th><th>Horário</th><th>No site</th><th>Ações</th></tr></thead>
             <tbody>
               {items.map((b) => (
                 <tr key={b.id}>

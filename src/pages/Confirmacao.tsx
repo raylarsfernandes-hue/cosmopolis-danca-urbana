@@ -5,7 +5,6 @@ import { useEventSettings } from '../hooks/useEventSettings'
 import type { ConfirmationRow } from '../types'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
-import { battleSignupText } from '../components/BattleCard'
 import { formatWeekdayDate } from '../utils/format'
 
 export default function Confirmacao() {
@@ -65,6 +64,18 @@ export default function Confirmacao() {
                   </strong>
                 </div>
                 <div className="row"><span>Entrada</span><strong>Gratuita</strong></div>
+                {row.workshops?.length > 0 && (
+                  <>
+                    <div className="confirm-list-label">Workshops</div>
+                    <ul className="confirm-list">{row.workshops.map((w) => <li key={w}>{w}</li>)}</ul>
+                  </>
+                )}
+                {row.battles?.length > 0 && (
+                  <>
+                    <div className="confirm-list-label">Batalhas{row.artistic_name ? ` · como ${row.artistic_name}` : ''}</div>
+                    <ul className="confirm-list">{row.battles.map((b) => <li key={b}>{b}</li>)}</ul>
+                  </>
+                )}
                 <div className="confirm-code-label">Código de inscrição</div>
                 <div className="confirm-code">{row.code}</div>
               </div>
@@ -83,9 +94,6 @@ export default function Confirmacao() {
               </div>
             )}
 
-            {!cancelled && (
-              <p className="confirm-text small">Batalhas: {battleSignupText(settings).toLowerCase()}.</p>
-            )}
 
             <div className="confirm-actions">
               <Link to={{ pathname: '/', hash: '#programacao' }} className="btn-secondary">Ver programação</Link>

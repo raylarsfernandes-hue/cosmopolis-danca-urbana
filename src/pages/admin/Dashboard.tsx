@@ -9,10 +9,32 @@ export default function Dashboard() {
   const { settings } = useEventSettings()
   const [rows, setRows] = useState<RegistrationRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [activities, setActivities] = useState<{ label: string; kind: string; count: number; max: number | null }[]>([])
 
   useEffect(() => {
-    supabase.from('registrations').select('*').order('created_at', { ascending: false }).then(({ data }) => {
-      setRows((data ?? []) as RegistrationRow[])
+    Promise.all([
+      supabase.from('registrations').select('*').order('created_at', { ascending: false }),
+      supabase.from('workshops').select('id, teacher_name, modality, max_vagas, order_index').order('order_index'),
+      supabase.from('battles').select('id, name, max_vagas, order_index').order('order_index'),
+      supabase.from('registration_workshops').select('registration_id, workshop_id'),
+      supabase.from('registration_battles').select('registration_id, battle_id'),
+    ]).then(([r, w, b, rw, rb]) => {
+      const regs = (r.data ?? []) as RegistrationRow[]
+      const confirmedIds = new Set(regs.filter((x) => x.status === 'confirmed').map((x) => x.id))
+      const countBy = (list: Record<string, string>[], key: string, id: string) =>
+        list.filter((x) => x[key] === id && confirmedIds.has(x.registration_id)).length
+      const rwList = (rw.data ?? []) as Record<string, string>[]
+      const rbList = (rb.data ?? []) as Record<string, string>[]
+      setActivities([
+        ...((w.data ?? []) as { id: string; teacher_name: string; modality: string | null; max_vagas: number | null }[]).map((x) => ({
+          label: x.modality ? `${x.modality} · ${x.teacher_name}` : x.teacher_name, kind: 'Workshop',
+          count: countBy(rwList, 'workshop_id', x.id), max: x.max_vagas,
+        })),
+        ...((b.data ?? []) as { id: string; name: string; max_vagas: number | null }[]).map((x) => ({
+          label: x.name, kind: 'Batalha', count: countBy(rbList, 'battle_id', x.id), max: x.max_vagas,
+        })),
+      ])
+      setRows(regs)
       setLoading(false)
     })
   }, [])
@@ -60,6 +82,17 @@ export default function Dashboard() {
             <div className="small-label">{Math.max(max - confirmed.length, 0)} vagas restantes · ocupação {pct}%</div>
           </>
         )}
+      </div>
+
+      <div className="card" style={{ marginTop: 18 }}>
+        <h3>Inscritos por atividade</h3>
+        <p className="small-label" style={{ marginTop: -6, marginBottom: 10 }}>Só inscrições confirmadas.</p>
+        {activities.map((a) => (
+          <div key={a.kind + a.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14, padding: '7px 0', borderBottom: '1px solid var(--line)' }}>
+            <span><span className="muted">{a.kind}:</span> {a.label}</span>
+            <strong>{a.count}{a.max !== null ? ` / ${a.max}` : ''}</strong>
+          </div>
+        ))}
       </div>
 
       <div className="card" style={{ marginTop: 18 }}>

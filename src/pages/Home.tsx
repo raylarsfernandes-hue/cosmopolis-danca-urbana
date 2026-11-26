@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import RegisterButton from '../components/RegisterButton'
-import BattleCard from '../components/BattleCard'
+import BattleCard, { judgesLabel } from '../components/BattleCard'
 import { Sunburst, Spark, Swoosh, Rays } from '../components/Graphics'
 import { useEventSettings } from '../hooks/useEventSettings'
 import { usePublicList } from '../hooks/usePublicList'
@@ -61,7 +61,7 @@ export default function Home() {
       key: `b-${b.id}`,
       kind: 'Batalha',
       title: b.name,
-      detail: b.judge_name ? `Júri: ${b.judge_name}` : null,
+      detail: b.judge_name ? `${judgesLabel(b.judge_name)}: ${b.judge_name}` : null,
       time: b.start_time,
       duration: null,
     })),
@@ -166,7 +166,7 @@ export default function Home() {
         <div className="container">
           <div className="section-kicker">02 · Programação</div>
           <h2>{settings ? formatWeekdayDate(settings.event_date) : 'Programação'}</h2>
-          <p className="lead">Tudo acontece no mesmo dia. Uma inscrição vale para o dia inteiro.</p>
+          <p className="lead">Tudo acontece no mesmo dia. Na inscrição você escolhe os workshops e as batalhas.</p>
 
           {(loadingW || loadingB) && <p className="muted">Carregando programação...</p>}
 
@@ -275,9 +275,9 @@ export default function Home() {
           <div className="section-kicker">05 · Inscrições</div>
           <h2>{settings?.registrations_open ? <>Sua vaga é gratuita.<br />Garanta agora.</> : <>Inscrições<br />em breve.</>}</h2>
           <ul className="cta-points">
-            <li>Uma inscrição vale para o dia inteiro: workshops, batalhas e jam.</li>
+            <li>No formulário você escolhe os workshops que quer fazer. Pode marcar mais de um.</li>
             <li>Menor de 18 anos na data do evento precisa de autorização assinada pelo responsável.</li>
-            <li>Quer competir nas batalhas? A inscrição para competir é feita no local, no dia.</li>
+            <li>Quer competir? Marque no formulário a batalha em que vai dançar e informe seu nome artístico.</li>
             {vagas && (
               <li>
                 {vagas.status === 'lista_espera'

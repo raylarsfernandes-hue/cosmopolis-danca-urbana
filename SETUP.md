@@ -7,6 +7,8 @@ Ordem recomendada: Supabase → GitHub → Netlify → primeiro admin → teste.
 1. Em supabase.com, **New project**. Nome sugerido: `cosmopolis-danca-urbana`.
    Região: South America (São Paulo). Guarde a senha do banco.
 2. **SQL Editor → New query**: cole todo o conteúdo de `supabase/schema.sql` e clique em **Run**.
+   Se você já tinha rodado uma versão anterior do schema neste projeto, rode em vez disso
+   `supabase/atualizacao_2_inscricao_workshops_batalhas.sql` (não apaga inscrições).
    No fim aparecem três tabelas de conferência: o evento (5/12/2026, Rua Ponciano Tonucci, 87),
    os 5 professores e as 2 batalhas.
 3. **Project Settings → API**:
@@ -73,7 +75,7 @@ ou redefina a senha pelo próprio painel.
 6. `/admin/inscritos`: check-in, promover, cancelar, exportar CSV.
 7. Apague os testes antes de divulgar (SQL Editor):
    ```sql
-   delete from registrations;
+   delete from registrations;   -- apaga junto as escolhas de workshops e batalhas
    alter sequence registration_code_seq restart with 1;
    ```
    e volte o limite de vagas para o valor real.
@@ -81,9 +83,9 @@ ou redefina a senha pelo próprio painel.
 ## Onde editar cada coisa (/admin)
 
 - **Configurações**: abrir/fechar inscrições, limite de vagas, link de formulário externo,
-  PDF de autorização, escolha de workshops, nome, data, endereço, CEP, mapa,
-  horário-limite das batalhas e dados da jam (DJ, foto, horário).
-- **Workshops**: professor, modalidade, horário, duração, foto.
-- **Batalhas**: nome, público, júri, foto do júri, prêmios, horário.
+  PDF de autorização, escolha de workshops, nome, data, endereço, CEP, mapa
+  e dados da jam (DJ, foto, horário).
+- **Workshops**: professor, modalidade, horário, duração, foto e limite de vagas.
+- **Batalhas**: nome, público, jurados, foto, prêmios, horário e limite de competidores.
 - **Régua**: upload e ordem dos logos institucionais (vazia = oculta no site).
-- **Inscritos**: busca, filtros, check-in, lista de espera, autorização de menores, CSV.
+- **Inscritos**: busca, filtro por workshop ou batalha (lista de cada aula e de competidores), check-in, lista de espera, autorização de menores, CSV.

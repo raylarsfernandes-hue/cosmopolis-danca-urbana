@@ -13,7 +13,6 @@ export interface EventSettings {
   registrations_open: boolean
   registration_form_url: string | null
   max_vagas: number | null
-  battle_signup_deadline: string | null // HH:MM:SS
   guardian_authorization_pdf_url: string | null
   workshop_selection_enabled: boolean
   jam_dj_name: string | null
@@ -49,6 +48,7 @@ export interface BattlePublic {
   prize_first: number | null
   prize_second: number | null
   start_time: string | null
+  max_vagas: number | null
   order_index: number
 }
 
@@ -80,6 +80,7 @@ export interface RegistrationRow {
   phone: string
   email: string
   instagram: string | null
+  artistic_name: string | null
   birth_date: string
   image_consent: boolean
   guardian_ack: boolean
@@ -104,4 +105,7 @@ export interface ConfirmationRow {
   status: RegistrationStatus
   waitlist_position: number | null
   is_minor: boolean
+  artistic_name: string | null
+  workshops: string[]
+  battles: string[]
 }

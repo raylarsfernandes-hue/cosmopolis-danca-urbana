@@ -9,9 +9,8 @@
 --   - configurações do evento numa linha única (event_settings)
 --   - uma inscrição por CPF para o dia inteiro, com trava de vagas no banco
 --     e lista de espera automática quando o limite é atingido
---   - workshops (professor + modalidade + horário) e escolha de workshops
---     preparada atrás de uma flag (desligada)
---   - batalhas com júri e premiação (inscrição no local, não pelo site)
+--   - workshops (professor + modalidade + horário), escolhidos na inscrição
+--   - batalhas com jurados e premiação, também escolhidas na inscrição
 --   - régua institucional alimentada pelo admin (começa vazia)
 --   - bucket público de imagens no Storage, com escrita só para admins
 --   - Row Level Security em tudo
@@ -32,6 +31,7 @@ drop view if exists battles_public;
 drop view if exists partner_logos_public;
 
 drop function if exists register_participant(text, text, text, text, text, date, boolean, boolean, boolean, boolean, uuid[]);
+drop function if exists register_participant(text, text, text, text, text, date, boolean, boolean, boolean, boolean, uuid[], uuid[], text);
 drop function if exists get_registration_by_token(uuid);
 drop function if exists admin_cancel_registration(uuid);
 drop function if exists admin_reactivate_registration(uuid);
@@ -73,9 +73,8 @@ create table if not exists event_settings (
   registrations_open boolean not null default false,
   registration_form_url text,               -- se preenchido, o botão de inscrição leva para este link
   max_vagas int check (max_vagas is null or max_vagas >= 0),  -- nulo = sem limite
-  battle_signup_deadline time,              -- horário-limite das inscrições no local
   guardian_authorization_pdf_url text,
-  workshop_selection_enabled boolean not null default false,
+  workshop_selection_enabled boolean not null default true,  -- escolha de workshops na inscrição
   jam_dj_name text,
   jam_dj_photo_url text,
   jam_start_time time,
@@ -106,14 +105,15 @@ create table if not exists workshops (
 );
 
 -- ---------------------------------------------------------------------
--- 4. Batalhas (inscrição no local, não há inscrição pelo site)
+-- 4. Batalhas (inscrição pelo site, junto com a inscrição geral)
 -- ---------------------------------------------------------------------
 create table if not exists battles (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   audience text,
-  judge_name text,
+  judge_name text,                          -- jurado(s), ex.: "Step Pérez, Marcão e Wellington Rodrigues"
   judge_photo_url text,
+  max_vagas int check (max_vagas is null or max_vagas >= 0),  -- nulo = sem limite de competidores
   prize_first numeric(10,2),
   prize_second numeric(10,2),
   start_time time,
@@ -148,6 +148,7 @@ create table if not exists registrations (
   phone text not null,
   email text not null,
   instagram text,
+  artistic_name text,                       -- nome artístico (para quem compete nas batalhas)
   birth_date date not null,
   consent_required boolean not null default false,
   image_consent boolean not null default false,
@@ -170,11 +171,18 @@ create unique index if not exists uq_registrations_cpf_active
 create index if not exists idx_registrations_status on registrations(status);
 create index if not exists idx_registrations_created on registrations(created_at);
 
--- workshops escolhidos (só usado quando workshop_selection_enabled = true)
+-- workshops escolhidos na inscrição
 create table if not exists registration_workshops (
   registration_id uuid not null references registrations(id) on delete cascade,
   workshop_id uuid not null references workshops(id) on delete cascade,
   primary key (registration_id, workshop_id)
+);
+
+-- batalhas em que a pessoa vai competir
+create table if not exists registration_battles (
+  registration_id uuid not null references registrations(id) on delete cascade,
+  battle_id uuid not null references battles(id) on delete cascade,
+  primary key (registration_id, battle_id)
 );
 
 -- ---------------------------------------------------------------------
@@ -186,7 +194,7 @@ select id, teacher_name, modality, start_time, duration_minutes, photo_url, orde
  where active;
 
 create view battles_public as
-select id, name, audience, judge_name, judge_photo_url, prize_first, prize_second, start_time, order_index
+select id, name, audience, judge_name, judge_photo_url, prize_first, prize_second, start_time, max_vagas, order_index
   from battles
  where active;
 
@@ -229,7 +237,9 @@ create or replace function register_participant(
   p_image_consent boolean,
   p_guardian_ack boolean,
   p_consent_marketing boolean,
-  p_workshop_ids uuid[] default null
+  p_workshop_ids uuid[] default null,
+  p_battle_ids uuid[] default null,
+  p_artistic_name text default null
 ) returns table(code text, result_status text, confirmation_token uuid, waitlist_position int)
 language plpgsql
 security definer
@@ -251,6 +261,10 @@ declare
   v_wmax int;
   v_wtaken int;
 begin
+  if coalesce(array_length(p_battle_ids, 1), 0) > 0 and length(trim(coalesce(p_artistic_name, ''))) = 0 then
+    raise exception 'NOME_ARTISTICO_OBRIGATORIO';
+  end if;
+
   if p_consent_required is not true then raise exception 'CONSENTIMENTO_OBRIGATORIO'; end if;
   if p_image_consent is not true then raise exception 'CONSENTIMENTO_IMAGEM_OBRIGATORIO'; end if;
   if p_birth_date is null or p_birth_date > current_date or p_birth_date < date '1900-01-01' then
@@ -294,19 +308,19 @@ begin
   v_code := 'EDUC-' || lpad(nextval('registration_code_seq')::text, 5, '0');
 
   insert into registrations (
-    code, full_name, cpf, phone, email, instagram, birth_date,
+    code, full_name, cpf, phone, email, instagram, artistic_name, birth_date,
     consent_required, image_consent, guardian_ack, guardian_authorization_status,
     consent_marketing, status, waitlist_position
   ) values (
     v_code, trim(p_full_name), v_cpf, trim(p_phone), lower(trim(p_email)),
-    nullif(trim(p_instagram), ''), p_birth_date,
+    nullif(trim(p_instagram), ''), nullif(trim(p_artistic_name), ''), p_birth_date,
     true, true, coalesce(p_guardian_ack, false),
     case when v_is_minor then 'pendente' else 'nao_necessaria' end,
     coalesce(p_consent_marketing, false), v_status, v_position
   )
   returning id, registrations.confirmation_token into v_reg_id, v_token;
 
-  -- escolha de workshops: só tem efeito com a flag ligada
+  -- workshops escolhidos (com a escolha ligada em Configurações)
   if v_settings.workshop_selection_enabled and coalesce(array_length(p_workshop_ids, 1), 0) > 0 then
     foreach v_wid in array (select array_agg(distinct x) from unnest(p_workshop_ids) x)
     loop
@@ -323,20 +337,44 @@ begin
     end loop;
   end if;
 
+  -- batalhas em que vai competir
+  if coalesce(array_length(p_battle_ids, 1), 0) > 0 then
+    foreach v_wid in array (select array_agg(distinct x) from unnest(p_battle_ids) x)
+    loop
+      select b.max_vagas into v_wmax from battles b where b.id = v_wid and b.active for update;
+      if not found then raise exception 'BATALHA_INVALIDA'; end if;
+      if v_wmax is not null and v_status = 'confirmed' then
+        select count(*) into v_wtaken
+          from registration_battles rb
+          join registrations r on r.id = rb.registration_id
+         where rb.battle_id = v_wid and r.status = 'confirmed';
+        if v_wtaken >= v_wmax then raise exception 'BATALHA_ESGOTADA'; end if;
+      end if;
+      insert into registration_battles (registration_id, battle_id) values (v_reg_id, v_wid);
+    end loop;
+  end if;
+
   return query select v_code, v_status, v_token, v_position;
 end;
 $$;
 
 -- tela de confirmação: busca pelo token (não adivinhável), devolve só o necessário
 create or replace function get_registration_by_token(p_token uuid)
-returns table(code text, full_name text, status text, waitlist_position int, is_minor boolean)
+returns table(code text, full_name text, status text, waitlist_position int, is_minor boolean,
+              artistic_name text, workshops text[], battles text[])
 language sql
 stable
 security definer
 set search_path = public
 as $$
   select r.code, r.full_name, r.status, r.waitlist_position,
-         extract(year from age(s.event_date, r.birth_date)) < 18
+         extract(year from age(s.event_date, r.birth_date)) < 18,
+         r.artistic_name,
+         array(select coalesce(w.modality || ' com ' || w.teacher_name, 'Workshop com ' || w.teacher_name)
+                 from registration_workshops rw join workshops w on w.id = rw.workshop_id
+                where rw.registration_id = r.id order by w.start_time nulls last, w.order_index),
+         array(select b.name from registration_battles rb join battles b on b.id = rb.battle_id
+                where rb.registration_id = r.id order by b.order_index)
     from registrations r
     cross join event_settings s
    where r.confirmation_token = p_token;
@@ -434,6 +472,7 @@ alter table battles enable row level security;
 alter table partner_logos enable row level security;
 alter table registrations enable row level security;
 alter table registration_workshops enable row level security;
+alter table registration_battles enable row level security;
 
 drop policy if exists admins_self_select on admins;
 create policy admins_self_select on admins for select using (is_admin());
@@ -458,22 +497,24 @@ create policy registrations_admin_select on registrations for select using (is_a
 
 drop policy if exists registration_workshops_admin_select on registration_workshops;
 create policy registration_workshops_admin_select on registration_workshops for select using (is_admin());
+drop policy if exists registration_battles_admin_select on registration_battles;
+create policy registration_battles_admin_select on registration_battles for select using (is_admin());
 
 -- ---------------------------------------------------------------------
 -- 11. Permissões
 -- ---------------------------------------------------------------------
-revoke all on registrations, registration_workshops, admins, workshops, battles, partner_logos from anon;
+revoke all on registrations, registration_workshops, registration_battles, admins, workshops, battles, partner_logos from anon;
 revoke insert, update, delete on registrations from authenticated;
 
 grant select on event_settings to anon, authenticated;
 grant update on event_settings to authenticated;
 grant select, insert, update, delete on workshops, battles, partner_logos to authenticated;
-grant select on registrations, registration_workshops, admins to authenticated;
+grant select on registrations, registration_workshops, registration_battles, admins to authenticated;
 
 grant select on workshops_public, battles_public, partner_logos_public, availability_public to anon, authenticated;
 
-revoke execute on function register_participant(text, text, text, text, text, date, boolean, boolean, boolean, boolean, uuid[]) from public;
-grant execute on function register_participant(text, text, text, text, text, date, boolean, boolean, boolean, boolean, uuid[]) to anon, authenticated;
+revoke execute on function register_participant(text, text, text, text, text, date, boolean, boolean, boolean, boolean, uuid[], uuid[], text) from public;
+grant execute on function register_participant(text, text, text, text, text, date, boolean, boolean, boolean, boolean, uuid[], uuid[], text) to anon, authenticated;
 grant execute on function get_registration_by_token(uuid) to anon, authenticated;
 grant execute on function is_admin() to anon, authenticated;
 
@@ -531,7 +572,7 @@ where not exists (select 1 from workshops);
 insert into battles (name, audience, judge_name, prize_first, prize_second, order_index)
 select * from (values
   ('Batalha de breaking', 'Para b-boys e b-girls.', 'B-boy Lula', 800.00, 200.00, 1),
-  ('Batalha all style', 'Aberta a diferentes estilos de dança.', 'Step Pérez', 800.00, 200.00, 2)
+  ('Batalha all style', 'Aberta a diferentes estilos de dança.', 'Step Pérez, Marcão e Wellington Rodrigues', 800.00, 200.00, 2)
 ) v(name, audience, judge_name, prize_first, prize_second, order_index)
 where not exists (select 1 from battles);
 

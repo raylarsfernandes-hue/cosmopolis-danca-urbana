@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useEventSettings } from '../hooks/useEventSettings'
 import { useAvailability } from '../hooks/useAvailability'
 import { usePublicList } from '../hooks/usePublicList'
-import type { RegisterResult, WorkshopPublic } from '../types'
+import type { BattlePublic, RegisterResult, WorkshopPublic } from '../types'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
-import { battleSignupText } from '../components/BattleCard'
+import { judgesLabel } from '../components/BattleCard'
 import {
   formatCPF, formatPhone, isValidCPF, isValidEmail, isValidBirthDate, computeAge,
   formatWeekdayDate, formatHourRange,
@@ -26,6 +26,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   JA_INSCRITO: 'Já existe uma inscrição com este CPF. Se precisar corrigir algum dado, fale com a organização.',
   WORKSHOP_INVALIDO: 'Um dos workshops escolhidos não está mais disponível. Atualize a página.',
   WORKSHOP_ESGOTADO: 'Um dos workshops escolhidos lotou. Atualize a página e escolha outro.',
+  BATALHA_INVALIDA: 'Uma das batalhas escolhidas não está mais disponível. Atualize a página.',
+  BATALHA_ESGOTADA: 'As vagas para competir nessa batalha acabaram. Desmarque a batalha para concluir a inscrição.',
+  NOME_ARTISTICO_OBRIGATORIO: 'Informe seu nome artístico para competir nas batalhas.',
 }
 
 export default function Inscricao() {
@@ -33,6 +36,8 @@ export default function Inscricao() {
   const { settings, loading } = useEventSettings()
   const { availability, reload } = useAvailability()
   const { items: workshops } = usePublicList<WorkshopPublic>('workshops_public')
+  const { items: battles } = usePublicList<BattlePublic>('battles_public')
+  const [params] = useSearchParams()
 
   const [fullName, setFullName] = useState('')
   const [cpf, setCpf] = useState('')
@@ -41,6 +46,12 @@ export default function Inscricao() {
   const [instagram, setInstagram] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [selectedWorkshops, setSelectedWorkshops] = useState<string[]>([])
+  // quem chega pelo botão "Quero competir" de uma batalha já vem com ela marcada
+  const [selectedBattles, setSelectedBattles] = useState<string[]>(() => {
+    const b = params.get('batalha')
+    return b ? [b] : []
+  })
+  const [artisticName, setArtisticName] = useState('')
   const [imageConsent, setImageConsent] = useState(false)
   const [consentRequired, setConsentRequired] = useState(false)
   const [guardianAck, setGuardianAck] = useState(false)
@@ -55,10 +66,15 @@ export default function Inscricao() {
     : false
 
   const chooseWorkshops = !!settings?.workshop_selection_enabled && workshops.length > 0
+  const chooseBattles = battles.length > 0
+  const competing = chooseBattles && selectedBattles.some((id) => battles.some((b) => b.id === id))
   const eventName = settings?.event_name ?? ''
 
   function toggleWorkshop(id: string) {
     setSelectedWorkshops((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  }
+  function toggleBattle(id: string) {
+    setSelectedBattles((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
   }
 
   function validate(): boolean {
@@ -68,7 +84,7 @@ export default function Inscricao() {
     if (phone.replace(/\D/g, '').length < 10) errs.phone = 'Informe um telefone/WhatsApp válido, com DDD.'
     if (!isValidEmail(email)) errs.email = 'E-mail inválido.'
     if (!birthDate || !isValidBirthDate(birthDate)) errs.birthDate = 'Informe uma data de nascimento válida.'
-    if (chooseWorkshops && selectedWorkshops.length === 0) errs.workshops = 'Escolha pelo menos um workshop.'
+    if (competing && !artisticName.trim()) errs.artisticName = 'Informe seu nome artístico para competir.'
     if (!imageConsent) errs.imageConsent = 'É necessário autorizar o uso de imagem.'
     if (!consentRequired) errs.consentRequired = 'É necessário aceitar para continuar.'
     if (isMinor && !guardianAck) errs.guardianAck = 'É necessário confirmar a ciência sobre a autorização do responsável.'
@@ -97,6 +113,8 @@ export default function Inscricao() {
       p_guardian_ack: guardianAck,
       p_consent_marketing: consentMarketing,
       p_workshop_ids: chooseWorkshops ? selectedWorkshops : null,
+      p_battle_ids: competing ? selectedBattles.filter((id) => battles.some((b) => b.id === id)) : null,
+      p_artistic_name: competing ? artisticName.trim() : null,
     })
     setSubmitting(false)
 
@@ -129,7 +147,7 @@ export default function Inscricao() {
           {settings && (
             <p className="lead">
               {formatWeekdayDate(settings.event_date)}, {settings.location_address}. Gratuito.
-              Uma inscrição vale para o dia inteiro.
+              Na inscrição você escolhe os workshops e as batalhas.
             </p>
           )}
         </div>
@@ -146,7 +164,7 @@ export default function Inscricao() {
                 Assim que abrirem, o botão de inscrição aparece aqui e na página inicial.
                 Acompanhe as redes do encontro.
               </p>
-              <p className="panel-text">Para competir nas batalhas: {battleSignupText(settings).toLowerCase()}.</p>
+              <p className="panel-text">A inscrição para os workshops e para competir nas batalhas será feita aqui.</p>
               <Link to="/" className="btn-secondary" style={{ marginTop: 18 }}>Voltar ao início</Link>
             </div>
           )}
@@ -208,8 +226,9 @@ export default function Inscricao() {
                 </div>
 
                 {chooseWorkshops && (
-                  <fieldset className={`workshop-pick ${errors.workshops ? 'error' : ''}`}>
-                    <legend>Quais workshops você quer fazer? *</legend>
+                  <fieldset className="workshop-pick">
+                    <legend>Workshops que você quer fazer</legend>
+                    <p className="pick-hint">Pode marcar mais de um.</p>
                     {workshops.map((w) => (
                       <label key={w.id} className="checkbox-field">
                         <input type="checkbox" checked={selectedWorkshops.includes(w.id)} onChange={() => toggleWorkshop(w.id)} />
@@ -219,7 +238,30 @@ export default function Inscricao() {
                         </span>
                       </label>
                     ))}
-                    {errors.workshops && <div className="error-msg">{errors.workshops}</div>}
+                  </fieldset>
+                )}
+
+                {chooseBattles && (
+                  <fieldset className="workshop-pick">
+                    <legend>Batalhas em que você quer competir</legend>
+                    <p className="pick-hint">Só vai assistir? Deixe sem marcar.</p>
+                    {battles.map((b) => (
+                      <label key={b.id} className="checkbox-field">
+                        <input type="checkbox" checked={selectedBattles.includes(b.id)} onChange={() => toggleBattle(b.id)} />
+                        <span>
+                          <strong>{b.name}</strong>
+                          {b.audience && <span className="pick-sub">{b.audience}</span>}
+                          {b.judge_name && <span className="pick-sub">{judgesLabel(b.judge_name)}: {b.judge_name}</span>}
+                        </span>
+                      </label>
+                    ))}
+                    {competing && (
+                      <div className={`field ${errors.artisticName ? 'error' : ''}`} style={{ marginTop: 6, marginBottom: 0 }}>
+                        <label htmlFor="f-artistico">Nome artístico *</label>
+                        <input id="f-artistico" type="text" value={artisticName} onChange={(e) => setArtisticName(e.target.value)} placeholder="Como você quer ser chamado(a) na batalha" />
+                        {errors.artisticName && <div className="error-msg">{errors.artisticName}</div>}
+                      </div>
+                    )}
                   </fieldset>
                 )}
 
@@ -283,7 +325,6 @@ export default function Inscricao() {
                 <button type="submit" className="submit-btn" disabled={submitting}>
                   {submitting ? 'Enviando...' : 'Confirmar inscrição'}
                 </button>
-                <p className="form-foot">Para competir nas batalhas: {battleSignupText(settings).toLowerCase()}.</p>
               </form>
             </div>
           )}

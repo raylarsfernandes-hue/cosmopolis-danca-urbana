@@ -112,8 +112,8 @@ export default function AdminWorkshops() {
             </div>
           </div>
           <p className="field-hint" style={{ marginTop: -8, marginBottom: 14 }}>
-            As vagas por workshop só contam se a escolha de workshops estiver ligada em Configurações
-            {settings?.workshop_selection_enabled ? ' (está ligada).' : ' (hoje está desligada).'}
+            Vazio = sem limite. Com limite, quando lotar o site recusa novas escolhas deste workshop
+            {settings?.workshop_selection_enabled ? '.' : ' (a escolha de workshops está desligada em Configurações).'}
           </p>
           <label className="checkbox-field">
             <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
